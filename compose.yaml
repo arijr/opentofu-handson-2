@@ -1,0 +1,38 @@
+services:
+  floci:
+    image: floci/floci:2.3.0
+    ports:
+      - "4566:4566"
+    volumes:
+      - floci-data:/app/data
+    environment:
+      FLOCI_DEFAULT_REGION: us-east-1
+      FLOCI_BASE_URL: http://localhost:4566
+      FLOCI_STORAGE_MODE: persistent
+      FLOCI_STORAGE_PERSISTENT_PATH: /app/data
+  dashboard:
+    build:
+      context: ./web-dashboard
+    ports:
+      - "8080:8080"
+    environment:
+      FLOCI_ENDPOINT_URL: http://floci:4566
+      AWS_ACCESS_KEY_ID: test
+      AWS_SECRET_ACCESS_KEY: test
+      AWS_DEFAULT_REGION: us-east-1
+      EXPECTED_S3_BUCKET: minicurso-opentofu-migrado
+    depends_on:
+      floci:
+        condition: service_started
+    healthcheck:
+      test:
+        - CMD
+        - python
+        - -c
+        - import urllib.request; urllib.request.urlopen('http://127.0.0.1:8080/health', timeout=2)
+      interval: 10s
+      timeout: 3s
+      retries: 3
+
+volumes:
+  floci-data:

@@ -1,0 +1,60 @@
+name: "OpenTofu Pipeline CI/CD"
+
+on:
+  push:
+    branches: ["main"]
+  pull_request:
+    branches: ["main"]
+
+jobs:
+  opentofu:
+    name: "OpenTofu Validation & Apply"
+    runs-on: ubuntu-latest
+
+    defaults:
+      run:
+        working-directory: ./modulo-4-avancado-cicd
+
+    steps:
+      - name: Checkout do Código
+        uses: actions/checkout@v4
+
+      - name: Setup OpenTofu
+        uses: opentofu/setup-opentofu@v1
+        with:
+          tofu_version: 1.11.5
+
+      - name: Iniciar Floci
+        run: docker compose -f ../compose.yaml up -d floci
+
+      - name: Aguardar Floci
+        run: |
+          for attempt in $(seq 1 30); do
+            if curl --silent --output /dev/null http://localhost:4566; then
+              exit 0
+            fi
+            sleep 2
+          done
+          echo "Floci não ficou disponível em http://localhost:4566" >&2
+          exit 1
+
+      - name: Verificar Formatação (tofu fmt)
+        run: tofu fmt -check
+
+      - name: Inicializar OpenTofu (tofu init)
+        run: tofu init
+
+      - name: Validar Sintaxe (tofu validate)
+        run: tofu validate
+
+      - name: Planejar Execução (tofu plan)
+        if: github.event_name == 'pull_request'
+        run: tofu plan -no-color
+
+      - name: Aplicar Alterações (tofu apply)
+        if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+        run: tofu apply -auto-approve
+
+      - name: Parar Floci
+        if: always()
+        run: docker compose -f ../compose.yaml down
